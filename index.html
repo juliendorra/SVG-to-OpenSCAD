@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SVG → OpenSCAD polygon() — drop an .svg</title>
+    <style>
+        :root {
+            --bg: #0b0c10;
+            --ink: #e8eaed;
+            --muted: #9aa0a6;
+            --card: #14151a;
+            --edge: #2a2c36;
+            --acc: #77ffa3;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+        }
+
+        header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--edge);
+            position: sticky;
+            top: 0;
+            background: linear-gradient(0deg, rgba(20, 21, 26, 0.6), rgba(20, 21, 26, 0.95));
+            backdrop-filter: blur(6px);
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 6px;
+        }
+
+        .muted {
+            color: var(--muted)
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        @media (max-width: 960px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--edge);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .panel h2 {
+            margin: 0;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--edge);
+            color: var(--muted)
+        }
+
+        .panel .body {
+            padding: 12px;
+        }
+
+        .drop {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border: 2px dashed var(--edge);
+            border-radius: 12px;
+            padding: 24px;
+            cursor: pointer;
+            transition: all .15s ease;
+            background: #0f1015
+        }
+
+        .drop:hover {
+            border-color: #3a3d4b
+        }
+
+        .drop.dragover {
+            border-color: var(--acc);
+            box-shadow: 0 0 0 3px #77ffa333 inset
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .controls label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .controls input[type="number"],
+        .controls input[type="text"],
+        .controls select {
+            background: #0f1015;
+            color: var(--ink);
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+
+        .controls input[type="checkbox"] {
+            transform: translateY(1px)
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button {
+            background: #10131a;
+            color: var(--ink);
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            padding: 8px 10px;
+            cursor: pointer
+        }
+
+        button.primary {
+            background: var(--acc);
+            color: #0b0c10;
+            border-color: transparent;
+            font-weight: 600
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 240px;
+            resize: vertical;
+            background: #0f1015;
+            color: var(--ink);
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            padding: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        .preview-wrap {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px
+        }
+
+        .preview {
+            background: #0f1015;
+            border: 1px dashed var(--edge);
+            border-radius: 10px;
+            padding: 8px;
+            min-height: 220px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto
+        }
+
+        .preview svg {
+            max-width: 100%;
+            max-height: 60vh;
+            background: #0c0d12;
+            border-radius: 8px
+        }
+
+        .tiny {
+            font-size: 12px
+        }
+
+        .warning {
+            color: #fca5a5
+        }
+
+        .ok {
+            color: #bbf7d0
+        }
+
+        .foot {
+            padding: 12px;
+            color: var(--muted);
+            font-size: 12px
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>SVG → <code>polygon()</code> for OpenSCAD</h1>
+        <div class="muted tiny">Drop an <code>.svg</code> file. The page extracts all <code>&lt;path d="..."&gt;</code> commands, approximates any curves, and emits a single <code>polygon(points, paths)</code> you can paste into OpenSCAD.</div>
+    </header>
+
+    <main>
+        <section class="panel">
+            <h2>Input</h2>
+            <div class="body">
+                <div id="drop" class="drop" tabindex="0" role="button" aria-label="Drop SVG or click to choose">
+                    <div>
+                        <div><strong>Drop SVG here</strong> or click to choose a file</div>
+                        <div class="muted tiny" style="margin-top:6px">Only <code>&lt;path&gt;</code> elements are processed. Convert shapes to paths in your editor first.</div>
+                    </div>
+                </div>
+                <input id="file" type="file" accept="image/svg+xml,.svg" hidden>
+
+                <div style="height:12px"></div>
+
+                <div class="controls">
+                    <label>Decimals
+                        <input id="decimals" type="number" min="0" max="6" step="1" value="2">
+                    </label>
+                    <label>Bezier segments (per C/S)
+                        <input id="segments" type="number" min="2" max="200" step="1" value="10">
+                    </label>
+                    <label class="row"><input id="invertY" type="checkbox"> Invert Y (SVG→OpenSCAD axis)</label>
+                    <label class="row"><input id="forceClose" type="checkbox" checked> Force close open subpaths</label>
+                </div>
+
+                <div style="height:8px"></div>
+                <div class="row">
+                    <button id="copyBtn">Copy output</button>
+                    <button id="saveBtn">Save .scad</button>
+                    <span id="status" class="muted tiny"></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Output</h2>
+            <div class="body">
+                <textarea id="out" spellcheck="false" placeholder="Drop an SVG to generate OpenSCAD code…"></textarea>
+                <div class="foot">
+                    <div id="notes" class="tiny">
+                        <span class="warning">Notes:</span> transforms on <code>&lt;path&gt;</code> (or parents) are ignored; only commands M/L/H/V/C/S/Z are supported; curves are approximated; duplicate points are merged after rounding.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>SVG Preview</h2>
+            <div class="body preview-wrap">
+                <div id="preview" class="preview muted tiny">(your SVG will render here)</div>
+                <div id="meta" class="muted tiny"></div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (function () {
+            const $ = sel => document.querySelector(sel);
+            const drop = $('#drop');
+            const fileInput = $('#file');
+            const out = $('#out');
+            const preview = $('#preview');
+            const meta = $('#meta');
+            const status = $('#status');
+            const decimalsEl = $('#decimals');
+            const segmentsEl = $('#segments');
+            const invertYEl = $('#invertY');
+            const forceCloseEl = $('#forceClose');
+            const copyBtn = $('#copyBtn');
+            const saveBtn = $('#saveBtn');
+
+            let lastSVGText = '';
+
+            // UI helpers
+            function setStatus(msg) { status.textContent = msg || ''; }
+
+            // Drag & drop
+            ;['dragenter', 'dragover'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.add('dragover'); }));
+            ;['dragleave', 'drop'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('dragover'); }));
+            drop.addEventListener('drop', (e) => {
+                const f = [...e.dataTransfer.files].find(f => /\.svg$/i.test(f.name) || f.type === 'image/svg+xml');
+                if (!f) { setStatus('No SVG file detected.'); return; }
+                readFile(f);
+            });
+            drop.addEventListener('click', () => fileInput.click());
+            drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+            fileInput.addEventListener('change', () => {
+                const f = fileInput.files[0];
+                if (f) readFile(f);
+            });
+
+            function readFile(file) {
+                setStatus('Reading…');
+                const fr = new FileReader();
+                fr.onload = () => {
+                    lastSVGText = fr.result;
+                    setStatus('Parsed.');
+                    renderPreview(lastSVGText);
+                    try { generate(lastSVGText); } catch (err) { out.value = 'Error: ' + err.message; console.error(err); }
+                };
+                fr.onerror = () => setStatus('Failed to read file.');
+                fr.readAsText(file);
+            }
+
+            function renderPreview(svgText) {
+                preview.innerHTML = '';
+                try {
+                    const svgDoc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+                    const svgEl = svgDoc.documentElement;
+                    // Sanitize a bit: remove scripts/foreignObject
+                    svgEl.querySelectorAll('script,foreignObject').forEach(n => n.remove());
+                    // Give a viewBox if missing to make it visible
+                    if (!svgEl.getAttribute('viewBox')) {
+                        const w = parseFloat(svgEl.getAttribute('width')) || 512;
+                        const h = parseFloat(svgEl.getAttribute('height')) || 512;
+                        svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+                    }
+                    preview.append(svgEl);
+                    const paths = svgEl.querySelectorAll('path');
+                    meta.textContent = `${paths.length} <path> element${paths.length !== 1 ? 's' : ''} found.`;
+                } catch (err) {
+                    preview.textContent = 'Could not render SVG.';
+                }
+            }
+
+            // Parsing + conversion
+            function generate(svgText) {
+                const decimals = clamp(parseInt(decimalsEl.value || '2', 10), 0, 10);
+                const segs = clamp(parseInt(segmentsEl.value || '10', 10), 2, 200);
+                const invertY = !!invertYEl.checked;
+                const forceClose = !!forceCloseEl.checked;
+
+                const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+                const pathNodes = [...doc.querySelectorAll('path')];
+                if (pathNodes.length === 0) { out.value = '// No <path> elements found in SVG.'; return; }
+
+                const points = [];                        // [{x,y}]
+                const pointIndex = new Map();             // 'x:y' -> idx  (after rounding)
+                const paths = [];                         // [[i0,i1,...,i0],[...]]
+
+                function q(n) { return Number(n.toFixed(decimals)); }
+                function key(x, y) { return q(x) + ':' + q(y); }
+                function addPoint(x, y) {
+                    const k = key(x, y);
+                    if (pointIndex.has(k)) return pointIndex.get(k);
+                    const idx = points.length;
+                    points.push({ x: q(x), y: q(y) });
+                    pointIndex.set(k, idx);
+                    return idx;
+                }
+
+                // numeric tokenizer
+                const TOK = /([MmLlHhVvCcSsZz])|(-?\d*\.?\d+(?:e[-+]?\d+)?)/g;
+
+                function processPath(d) {
+                    let cursor = { x: 0, y: 0 };
+                    let start = null;
+                    let curPath = null;           // array of indices
+                    let prevCmd = null;
+                    let prevCtrl = null;          // for S/s smooth curves (absolute point)
+
+                    const tokens = [...d.matchAll(TOK)].map(m => m[1] ? { t: 'cmd', v: m[1] } : { t: 'num', v: parseFloat(m[2]) });
+                    let i = 0;
+                    function has() { return i < tokens.length; }
+                    function peek() { return tokens[i]; }
+                    function next() { return tokens[i++]; }
+                    function readNum() { const t = next(); if (!t || t.t !== 'num') throw new Error('Expected number in path data.'); return t.v; }
+                    function ensurePath() { if (!curPath) { curPath = []; paths.push(curPath); } }
+
+                    while (has()) {
+                        let token = next();
+                        if (token.t !== 'cmd') throw new Error('Expected command letter in path data.');
+                        let cmd = token.v;
+                        const rel = (cmd === cmd.toLowerCase());
+                        cmd = cmd.toUpperCase();
+
+                        if (cmd === 'M') {
+                            // one or more pairs: first is move, rest are implicit L
+                            const x = readNum();
+                            const y = readNum();
+                            const abs = rel ? { x: cursor.x + x, y: cursor.y + y } : { x, y };
+                            cursor = abs;
+                            start = { ...cursor };
+                            ensurePath();
+                            curPath.push(addPoint(cursor.x, cursor.y));
+                            prevCtrl = null; prevCmd = 'M';
+                            // subsequent pairs => implicit L
+                            while (i < tokens.length && tokens[i].t === 'num') {
+                                const xx = readNum(), yy = readNum();
+                                const p = rel ? { x: cursor.x + xx, y: cursor.y + yy } : { x: xx, y: yy };
+                                cursor = p;
+                                curPath.push(addPoint(cursor.x, cursor.y));
+                                prevCtrl = null; prevCmd = 'L';
+                            }
+                            continue;
+                        }
+
+                        if (cmd === 'L') {
+                            ensurePath();
+                            while (i < tokens.length && tokens[i].t === 'num') {
+                                const x = readNum(), y = readNum();
+                                const p = rel ? { x: cursor.x + x, y: cursor.y + y } : { x, y };
+                                cursor = p;
+                                curPath.push(addPoint(cursor.x, cursor.y));
+                                prevCtrl = null; prevCmd = 'L';
+                            }
+                            continue;
+                        }
+
+                        if (cmd === 'H') {
+                            ensurePath();
+                            while (i < tokens.length && tokens[i].t === 'num') {
+                                const x = readNum();
+                                const p = rel ? { x: cursor.x + x, y: cursor.y } : { x, y: cursor.y };
+                                cursor = p;
+                                curPath.push(addPoint(cursor.x, cursor.y));
+                                prevCtrl = null; prevCmd = 'L';
+                            }
+                            continue;
+                        }
+
+                        if (cmd === 'V') {
+                            ensurePath();
+                            while (i < tokens.length && tokens[i].t === 'num') {
+                                const y = readNum();
+                                const p = rel ? { x: cursor.x, y: cursor.y + y } : { x: cursor.x, y };
+                                cursor = p;
+                                curPath.push(addPoint(cursor.x, cursor.y));
+                                prevCtrl = null; prevCmd = 'L';
+                            }
+                            continue;
+                        }
+
+                        if (cmd === 'C' || cmd === 'S') {
+                            ensurePath();
+                            // C: (x1 y1 x2 y2 x y)+
+                            // S: (x2 y2 x y)+, with x1,y1 reflected from prevCtrl when prev was C/S; otherwise equals cursor
+                            while (i < tokens.length) {
+                                if (tokens[i].t !== 'num') break;
+                                let x1, y1;
+                                if (cmd === 'C') {
+                                    x1 = readNum(); y1 = readNum();
+                                } else {
+                                    // S: smooth - first ctrl reflected from prev
+                                    if (prevCmd === 'C' || prevCmd === 'S') {
+                                        x1 = 2 * cursor.x - prevCtrl.x;
+                                        y1 = 2 * cursor.y - prevCtrl.y;
+                                    } else { x1 = cursor.x; y1 = cursor.y; }
+                                }
+                                let x2 = readNum(), y2 = readNum();
+                                let x = readNum(), y = readNum();
+                                if (rel) {
+                                    if (cmd === 'C') { x1 += cursor.x; y1 += cursor.y; }
+                                    x2 += cursor.x; y2 += cursor.y; x += cursor.x; y += cursor.y;
+                                }
+                                // interpolate cubic from cursor(p0) to p3
+                                const p0 = { x: cursor.x, y: cursor.y };
+                                const p1 = { x: x1, y: y1 };
+                                const p2 = { x: x2, y: y2 };
+                                const p3 = { x: x, y: y };
+                                // push segments points (t=1..segs)
+                                for (let j = 1; j <= segs; j++) {
+                                    const t = j / segs;
+                                    const bx = cubic(p0.x, p1.x, p2.x, p3.x, t);
+                                    const by = cubic(p0.y, p1.y, p2.y, p3.y, t);
+                                    curPath.push(addPoint(bx, by));
+                                }
+                                cursor = { x, y };
+                                prevCtrl = { x: x2, y: y2 };
+                                prevCmd = cmd;
+                            }
+                            continue;
+                        }
+
+                        if (cmd === 'Z') {
+                            if (curPath && curPath.length) {
+                                // close to first index
+                                const first = curPath[0];
+                                if (curPath[curPath.length - 1] !== first) curPath.push(first);
+                                curPath = null; start = null; prevCtrl = null; prevCmd = 'Z';
+                            }
+                            continue;
+                        }
+
+                        // Unsupported commands => throw to surface quickly
+                        throw new Error('Unsupported path command: ' + cmd + ' (only M/L/H/V/C/S/Z are supported)');
+                    }
+
+                    // finalize open subpath if requested
+                    if (curPath && curPath.length) {
+                        if (forceClose) { const first = curPath[0]; if (curPath[curPath.length - 1] !== first) curPath.push(first); }
+                        curPath = null;
+                    }
+                }
+
+                // Process each <path>
+                pathNodes.forEach(p => {
+                    const d = p.getAttribute('d') || '';
+                    if (d.trim()) processPath(d);
+                });
+
+                // Build output
+                if (points.length === 0 || paths.length === 0) { out.value = '// No usable path data found.'; return; }
+
+                // Optional Y inversion based on bbox of collected points
+                let minY = Infinity, maxY = -Infinity;
+                for (const pt of points) { if (pt.y < minY) minY = pt.y; if (pt.y > maxY) maxY = pt.y; }
+
+                function fmt(n) { return n.toFixed(decimals); }
+                const ptsStr = points.map(p => `\t\t[${fmt(p.x)},${fmt(invertY ? (minY + maxY - p.y) : p.y)}]`).join(',\n');
+                const pathsStr = paths.map(arr => '\t\t[' + arr.join(',') + ']').join(',\n');
+
+                const scad = `polygon(\n\tpoints=[\n${ptsStr}\n\t],\n\tpaths=[\n${pathsStr}\n\t],\n\tconvexity=10\n);`;
+                out.value = scad;
+            }
+
+            // math utils
+            function cubic(_0, _1, _2, _3, t) {
+                const it = 1 - t;
+                return it * it * it * _0 + 3 * it * it * t * _1 + 3 * it * t * t * _2 + t * t * t * _3;
+            }
+            function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
+
+            // Controls re-generate
+            [decimalsEl, segmentsEl, invertYEl, forceCloseEl].forEach(el => el.addEventListener('input', () => {
+                if (lastSVGText) try { generate(lastSVGText); } catch (err) { out.value = 'Error: ' + err.message; }
+            }));
+
+            // Copy + Save
+            copyBtn.addEventListener('click', async () => {
+                try { await navigator.clipboard.writeText(out.value); setStatus('Copied.'); } catch { setStatus('Copy failed.'); }
+                setTimeout(() => setStatus(''), 1200);
+            });
+            saveBtn.addEventListener('click', () => {
+                const blob = new Blob([out.value || ''], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'from_svg_polygon.scad';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setStatus('Saved.');
+                setTimeout(() => setStatus(''), 1200);
+            });
+
+        })();
+    </script>
+</body>
+
+</html>
